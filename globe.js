@@ -3377,6 +3377,445 @@
         this.fontSize = label.fontSize || 3
     }
 
+
+    /**
+     * 导弹系统
+     * @param context
+     * @param camera
+     * @param globe
+     * @constructor
+     */
+    function Missile(context, camera, globe) {
+        var self = this;
+
+        self.context = context;
+        self.camera = camera;
+        self.globe = globe;
+
+        /**
+         * 待发的导弹个数
+         * @type {number}
+         */
+        self.count = 1000;
+
+        /**
+         * 光圈效果
+         * @type {{program: *, buffer: null}}
+         */
+        self.icon = {
+            program: getProgram(context, "missile_icon"),
+            buffer: null,
+            count: 0
+        };
+
+        /**
+         * 光锥效果
+         * @type {{program: *, buffer: null}}
+         */
+        self.cone = {
+            program: getProgram(context, "missile_cone"),
+            count: 0,
+            buffer: null
+        };
+
+        /**
+         * 地面撞击效果
+         * @type {{program: *, texture: *}}
+         */
+        self.impact = {
+            program: getProgram(context, "missile_impact"),
+            texture: loadTexture2D(context, resource("texture/impact-512.jpg"), {
+                mipmap: false
+            }),
+            quad: makeVertexBuffer(context, new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]))
+        };
+
+        /**
+         * 导弹轨迹效果
+         * @type {{program: *, buffer: null}}
+         */
+        self.missile = {
+            program: getProgram(context, "missile_main"),
+            buffer: null,
+            bufferData: new FLOAT32_ARRAY(self.count * 800)
+        };
+
+        /**
+         * 待发的导弹
+         * @type {Array}
+         */
+        self.items = [];
+
+        self.buildMissile();
+        self.buildCone();
+        self.buildIcon();
+    }
+
+    Missile.prototype = {
+        constructor: Missile,
+        /**
+         * 构造光锥
+         * @returns {Missile}
+         */
+        buildCone: function () {
+            var vertex = [];
+            var count = 16;
+
+            for (var n = 0; count > n; ++n) {
+                var o = MATH_PI * 2 * n / (count - 1),
+                    a = MATH_COS(o),
+                    i = MATH_SIN(o);
+
+                vertex.push(a, 0, i, a, 1, i)
+            }
+            var floatArray = new FLOAT32_ARRAY(vertex);
+
+            this.cone.count = floatArray.length / 3;
+            this.cone.buffer = makeVertexBuffer(this.context, floatArray);
+
+            return this;
+        },
+        buildIcon: function () {
+            var self = this,
+                context = self.context,
+                vertex = [];
+
+            function addVertex(e, t) {
+
+                vertex.push(MATH_COS(e), MATH_SIN(e), t)
+            }
+
+            var n_sides = 16;
+
+            var a = 0 > n_sides;
+            n_sides = MATH.abs(n_sides);
+            var i = a ? MATH_PI / n_sides : MATH_PI * 2 / n_sides;
+            for (var c = 0; 5 > c; ++c) {
+                for (var l = 0, s = 0; n_sides > s; ++s) {
+                    addVertex(l, c);
+                    addVertex(l + i, c);
+                    l += i;
+                }
+                if (a) {
+                    addVertex(l, c);
+                    addVertex(0, c)
+                }
+            }
+
+            vertex = new Float32Array(vertex);
+            self.icon.count = vertex.length/3;
+
+            self.icon.buffer = makeVertexBuffer(context, vertex);
+
+            return self;
+        },
+        /**
+         * 构造导弹轨迹效果
+         * @returns {Missile}
+         */
+        buildMissile: function () {
+            var self = this,
+                context = self.context;
+
+            //初始化1000个导弹
+            for (var i = 0; i < self.count; i++) {
+                var vertex = self.missile.bufferData.subarray(i * 800, (i + 1) * 800);
+                self.items.push(new MissileItem(i, vertex));
+            }
+
+            self.missile.buffer = makeVertexBuffer(context, self.missile.bufferData);
+
+            return self;
+        },
+        /**
+         * 获取一个空闲的导弹
+         * @returns {MissileItem}
+         */
+        getFreeMissile: function () {
+            var time = this.time;
+            var items = this.items;
+            var r = null, n = 0;
+
+            for (var i = 0; i < items.length; ++i) {
+                var item = items[i];
+
+                if (!item.alive) return item;
+
+                var diff = time - item.start_time;
+
+                if (diff > n) {
+                    n = diff;
+                    r = item;
+                }
+            }
+
+            if (r) {
+                return r
+            }
+            var sample = range(0, items.length);
+
+            return items[sample];
+        },
+
+        render: function () {
+            var self = this,
+                context = self.context,
+                camera = self.camera;
+
+            self.time = timeNow();
+
+            context.enable(context.DEPTH_TEST);
+            context.depthMask(!1);
+
+            context.enable(context.BLEND);
+            context.blendFunc(context.SRC_ALPHA, context.ONE);
+
+            self.drawMissile();
+            self.drawImpacts();
+            self.drawCone();
+            self.drawIcon();
+            context.depthMask(true);
+        },
+        /**
+         * 画光锥效果
+         * @returns {Missile}
+         */
+        drawCone: function () {
+            var self = this,
+                context = self.context,
+                camera = self.camera,
+                program = self.cone.program.use();
+
+            program.uniformMatrix4fv("mvp", camera.mvp);
+            bindVertexBuffer(context, self.cone.buffer);
+            program.vertexAttribPointer("position", 3, context.FLOAT, false, 0, 0);
+
+            each(self.items, function (item) {
+                if (item.alive) {
+                    var o = self.time - item.start_time;
+                    if (item.has_target && o >= 1 && 2 > o) {
+                        program.uniform3fv("color", item.color);
+                        program.uniformMatrix4fv("mat", item.target_mat);
+                        program.uniform1f("time", o - 1);
+                        context.drawArrays(context.TRIANGLE_STRIP, 0, self.cone.count);
+                    }
+                }
+            });
+            return self;
+        },
+        drawMissile: function () {
+            var self = this,
+                context = self.context,
+                camera = self.camera,
+                items = self.items;
+
+            var program = self.missile.program.use();
+            program.uniformMatrix4fv("mvp", camera.mvp);
+            program.uniform3fv("view_position", camera.viewPos);
+            program.uniform1f("width", .1);
+            bindVertexBuffer(context, this.missile.buffer);
+            program.vertexAttribPointer("position", 4, context.FLOAT, !1, 0, 0);
+            each(items, function (missile) {
+                if (missile.alive && missile.has_source) {
+
+                    var time = self.time - missile.start_time;
+
+                    if (2 > time) {
+
+                        program.uniform1f("time", .5 * time);
+                        program.uniform3fv("color", missile.color);
+                        var a = 200,
+                            i = a * missile.index;
+                        context.drawArrays(context.TRIANGLE_STRIP, i, a)
+                    }
+                }
+            });
+            return self;
+        },
+        drawImpacts: function () {
+            var self = this,
+                camera = self.camera,
+                context = self.context;
+
+            var program = self.impact.program.use();
+
+            program.uniformMatrix4fv("mvp", camera.mvp);
+            program.uniformSampler2D("t_color", self.impact.texture);
+            bindVertexBuffer(context, self.impact.quad);
+            program.vertexAttribPointer("position", 2, context.FLOAT, false, 0, 0);
+            each(self.items, function (missile) {
+                if (missile.alive) {
+
+                    var diffTime = self.time - missile.start_time;
+                    if (diffTime > 4) return void(missile.alive = !1);
+                    program.uniform3fv("color", missile.color);
+
+                    if (missile.has_source && missile.draw_source_impact && 1 > diffTime) {
+                        program.uniformMatrix4fv("mat", missile.source_mat);
+                        program.uniform1f("time", diffTime);
+                        context.drawArrays(context.TRIANGLE_STRIP, 0, 4)
+                    }
+                    if (missile.has_target && diffTime >= 1) {
+                        program.uniformMatrix4fv("mat", missile.target_mat);
+                        program.uniform1f("time", (diffTime - 1) / 3);
+                        context.drawArrays(context.TRIANGLE_STRIP, 0, 4);
+                    }
+
+                }
+            });
+            return self;
+        },
+        drawIcon: function () {
+            var self = this,
+                context = self.context;
+
+            var program = self.icon.program.use();
+            program.uniformMatrix4fv("mvp", self.camera.mvp);
+            program.uniform1f("scale", .05);
+            bindVertexBuffer(context, self.icon.buffer);
+            program.vertexAttribPointer("vertex", 3, context.FLOAT, false, 0, 0);
+            context.lineWidth(2);
+            each(self.items, function (missile) {
+                if (missile.alive) {
+
+                    var r = self.time - missile.start_time;
+
+                    if (r >= 1 && 2 > r) {
+                        program.uniformMatrix4fv("mat", missile.target_mat);
+                        program.uniform3fv("color", missile.color);
+                        program.uniform1f("time", r - 1);
+                        context.drawArrays(context.LINES, 0, self.icon.count);
+                    }
+                }
+            });
+            context.lineWidth(1);
+            return self;
+        },
+        /**
+         *
+         * @param source_coord
+         * @param target_coord
+         * @param style
+         * @param sacle
+         * @param angle
+         * @returns {Missile}
+         */
+        launch: function (source_coord, target_coord, style, sacle, angle) {
+            var self = this,
+                missile = self.getFreeMissile(),
+                color = color2Vec3(style),
+                camera = self.camera,
+                context = self.context,
+                bufferData = self.missile.bufferData;
+            sacle = sacle || 1;
+            angle = angle || 0;
+
+            missile.has_source = !!source_coord;
+
+            vec3.copy(missile.target_coord, target_coord);
+
+            vec3.copy(missile.color, color);
+
+            missile.start_time = timeNow();
+            missile.alive = true;
+
+            if (missile.has_source) {
+                vec3.copy(missile.source_coord, source_coord);
+                var p = vec2.distance(source_coord, target_coord),
+                    m = .01 * p,
+                    d = (target_coord[0] - source_coord[0]) / p,
+                    _ = (target_coord[1] - source_coord[1]) / p,
+                    b = 200,
+                    y = b * -_,
+                    T = b * d;
+
+                var w = MATH_COS(angle),
+                    E = MATH_SIN(angle),
+                    x = missile.index * 800,
+                    A = vec3.create(),
+                    M = vec3.create();
+                for (var R = 0; 100 > R; ++R) {
+                    var P = R / (100 - 1);
+                    vec3.lerp(M, source_coord, target_coord, P);
+                    var L = m * MATH_SIN(P * MATH_PI) * .15;
+                    M[0] += E * L * y;
+                    M[1] += E * L * T;
+                    M[2] += w * L;
+                    camera.projection(A, M);
+                    bufferData[x + 0] = A[0];
+                    bufferData[x + 1] = A[1];
+                    bufferData[x + 2] = A[2];
+                    bufferData[x + 3] = -P;
+                    bufferData[x + 4] = A[0];
+                    bufferData[x + 5] = A[1];
+                    bufferData[x + 6] = A[2];
+                    bufferData[x + 7] = P;
+                    x += 8
+                }
+                bindVertexBuffer(context, self.missile.buffer);
+                context.bufferSubData(context.ARRAY_BUFFER, 4 * missile.index * 800, missile.vertex);
+                if (missile.source_coord[2] < .015) {
+                    missile.projection(missile.source_mat, missile.source_coord, sacle, camera);
+                    missile.draw_source_impact = true
+                } else {
+                    missile.draw_source_impact = false
+
+                }
+            }
+            missile.projection(missile.target_mat, missile.target_coord, sacle, camera);
+            return this;
+        }
+    };
+
+    function MissileItem(index, vectors) {
+        this.vertex = vectors;
+        this.index = index;
+        this.source_coord = vec3.create();
+        this.target_coord = vec3.create();
+        this.source_mat = mat4.create();
+        this.target_mat = mat4.create();
+        this.start_time = 0;
+        this.alive = false;
+        this.color = vec3.create(0, 0, 0);
+        this.has_source = true;
+        this.has_target = true;
+        this.draw_source_impact = true;
+    }
+
+    MissileItem.prototype = {
+        constructor: MissileItem,
+        projection: function (mat, coord, sacle, camera) {
+            var o = vec3.create(),
+                a = vec3.create(),
+                l = vec3.create(),
+                f = vec3.create();
+            camera.projection(f, coord);
+            if (camera.projectionBlend > .5) {
+                vec3.normalize(l, f);
+                vec3.set(o, 0, 1, 0);
+                vec3.cross(o, l, o);
+                vec3.normalize(o, o);
+                vec3.cross(a, o, l);
+                mat[0] = o[0];
+                mat[1] = o[1];
+                mat[2] = o[2];
+                mat[4] = l[0];
+                mat[5] = l[1];
+                mat[6] = l[2];
+                mat[8] = a[0];
+                mat[9] = a[1];
+                mat[10] = a[2];
+            } else {
+                mat4.identity(mat);
+                mat4.rotateX(mat, mat, -.5 * MATH_PI);
+            }
+            sacle && mat4.scale(mat, mat, [sacle, sacle, sacle]);
+            mat[12] = f[0];
+            mat[13] = f[1];
+            mat[14] = f[2];
+        }
+    }
+    
     /**
      * 绘制世界
      * @param context
@@ -4748,450 +5187,6 @@
 
     window.Globe = Globe;
 
-    function Icon() {
 
-    }
-
-    Icon.prototype.render = function () {
-
-    }
-
-    /**
-     * 导弹系统
-     * @param context
-     * @param camera
-     * @param globe
-     * @constructor
-     */
-    function Missile(context, camera, globe) {
-        var self = this;
-
-        self.context = context;
-        self.camera = camera;
-        self.globe = globe;
-
-        /**
-         * 待发的导弹个数
-         * @type {number}
-         */
-        self.count = 1000;
-
-        /**
-         * 光圈效果
-         * @type {{program: *, buffer: null}}
-         */
-        self.icon = {
-            program: getProgram(context, "missile_icon"),
-            buffer: null,
-            count: 0
-        };
-
-        /**
-         * 光锥效果
-         * @type {{program: *, buffer: null}}
-         */
-        self.cone = {
-            program: getProgram(context, "missile_cone"),
-            count: 0,
-            buffer: null
-        };
-
-        /**
-         * 地面撞击效果
-         * @type {{program: *, texture: *}}
-         */
-        self.impact = {
-            program: getProgram(context, "missile_impact"),
-            texture: loadTexture2D(context, resource("texture/impact-512.jpg"), {
-                mipmap: false
-            }),
-            quad: makeVertexBuffer(context, new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]))
-        };
-
-        /**
-         * 导弹轨迹效果
-         * @type {{program: *, buffer: null}}
-         */
-        self.missile = {
-            program: getProgram(context, "missile_main"),
-            buffer: null,
-            bufferData: new FLOAT32_ARRAY(self.count * 800)
-        };
-
-        /**
-         * 待发的导弹
-         * @type {Array}
-         */
-        self.items = [];
-
-        self.buildMissile();
-        self.buildCone();
-        self.buildIcon();
-    }
-
-    Missile.prototype = {
-        constructor: Missile,
-        /**
-         * 构造光锥
-         * @returns {Missile}
-         */
-        buildCone: function () {
-            var vertex = [];
-            var count = 16;
-
-            for (var n = 0; count > n; ++n) {
-                var o = MATH_PI * 2 * n / (count - 1),
-                    a = MATH_COS(o),
-                    i = MATH_SIN(o);
-
-                vertex.push(a, 0, i, a, 1, i)
-            }
-            var floatArray = new FLOAT32_ARRAY(vertex);
-
-            this.cone.count = floatArray.length / 3;
-            this.cone.buffer = makeVertexBuffer(this.context, floatArray);
-
-            return this;
-        },
-        buildIcon: function () {
-            var self = this,
-                context = self.context,
-                vertex = [];
-
-            function addVertex(e, t) {
-
-                vertex.push(MATH_COS(e), MATH_SIN(e), t)
-            }
-
-            var n_sides = 16;
-
-            var a = 0 > n_sides;
-            n_sides = MATH.abs(n_sides);
-            var i = a ? MATH_PI / n_sides : MATH_PI * 2 / n_sides;
-            for (var c = 0; 5 > c; ++c) {
-                for (var l = 0, s = 0; n_sides > s; ++s) {
-                    addVertex(l, c);
-                    addVertex(l + i, c);
-                    l += i;
-                }
-                if (a) {
-                    addVertex(l, c);
-                    addVertex(0, c)
-                }
-            }
-
-            vertex = new Float32Array(vertex);
-            self.icon.count = vertex.length/3;
-
-            self.icon.buffer = makeVertexBuffer(context, vertex);
-
-            return self;
-        },
-        /**
-         * 构造导弹轨迹效果
-         * @returns {Missile}
-         */
-        buildMissile: function () {
-            var self = this,
-                context = self.context;
-
-            //初始化1000个导弹
-            for (var i = 0; i < self.count; i++) {
-                var vertex = self.missile.bufferData.subarray(i * 800, (i + 1) * 800);
-                self.items.push(new MissileItem(i, vertex));
-            }
-
-            self.missile.buffer = makeVertexBuffer(context, self.missile.bufferData);
-
-            return self;
-        },
-        /**
-         * 获取一个空闲的导弹
-         * @returns {MissileItem}
-         */
-        getFreeMissile: function () {
-            var time = this.time;
-            var items = this.items;
-            var r = null, n = 0;
-
-            for (var i = 0; i < items.length; ++i) {
-                var item = items[i];
-
-                if (!item.alive) return item;
-
-                var diff = time - item.start_time;
-
-                if (diff > n) {
-                    n = diff;
-                    r = item;
-                }
-            }
-
-            if (r) {
-                return r
-            }
-            var sample = range(0, items.length);
-
-            return items[sample];
-        },
-
-        render: function () {
-            var self = this,
-                context = self.context,
-                camera = self.camera;
-
-            self.time = timeNow();
-
-            context.enable(context.DEPTH_TEST);
-            context.depthMask(!1);
-
-            context.enable(context.BLEND);
-            context.blendFunc(context.SRC_ALPHA, context.ONE);
-
-            self.drawMissile();
-            self.drawImpacts();
-            self.drawCone();
-            self.drawIcon();
-            context.depthMask(true);
-        },
-        /**
-         * 画光锥效果
-         * @returns {Missile}
-         */
-        drawCone: function () {
-            var self = this,
-                context = self.context,
-                camera = self.camera,
-                program = self.cone.program.use();
-
-            program.uniformMatrix4fv("mvp", camera.mvp);
-            bindVertexBuffer(context, self.cone.buffer);
-            program.vertexAttribPointer("position", 3, context.FLOAT, false, 0, 0);
-
-            each(self.items, function (item) {
-                if (item.alive) {
-                    var o = self.time - item.start_time;
-                    if (item.has_target && o >= 1 && 2 > o) {
-                        program.uniform3fv("color", item.color);
-                        program.uniformMatrix4fv("mat", item.target_mat);
-                        program.uniform1f("time", o - 1);
-                        context.drawArrays(context.TRIANGLE_STRIP, 0, self.cone.count);
-                    }
-                }
-            });
-            return self;
-        },
-        drawMissile: function () {
-            var self = this,
-                context = self.context,
-                camera = self.camera,
-                items = self.items;
-
-            var program = self.missile.program.use();
-            program.uniformMatrix4fv("mvp", camera.mvp);
-            program.uniform3fv("view_position", camera.viewPos);
-            program.uniform1f("width", .1);
-            bindVertexBuffer(context, this.missile.buffer);
-            program.vertexAttribPointer("position", 4, context.FLOAT, !1, 0, 0);
-            each(items, function (missile) {
-                if (missile.alive && missile.has_source) {
-
-                    var time = self.time - missile.start_time;
-
-                    if (2 > time) {
-
-                        program.uniform1f("time", .5 * time);
-                        program.uniform3fv("color", missile.color);
-                        var a = 200,
-                            i = a * missile.index;
-                        context.drawArrays(context.TRIANGLE_STRIP, i, a)
-                    }
-                }
-            });
-            return self;
-        },
-        drawImpacts: function () {
-            var self = this,
-                camera = self.camera,
-                context = self.context;
-
-            var program = self.impact.program.use();
-
-            program.uniformMatrix4fv("mvp", camera.mvp);
-            program.uniformSampler2D("t_color", self.impact.texture);
-            bindVertexBuffer(context, self.impact.quad);
-            program.vertexAttribPointer("position", 2, context.FLOAT, false, 0, 0);
-            each(self.items, function (missile) {
-                if (missile.alive) {
-
-                    var diffTime = self.time - missile.start_time;
-                    if (diffTime > 4) return void(missile.alive = !1);
-                    program.uniform3fv("color", missile.color);
-
-                    if (missile.has_source && missile.draw_source_impact && 1 > diffTime) {
-                        program.uniformMatrix4fv("mat", missile.source_mat);
-                        program.uniform1f("time", diffTime);
-                        context.drawArrays(context.TRIANGLE_STRIP, 0, 4)
-                    }
-                    if (missile.has_target && diffTime >= 1) {
-                        program.uniformMatrix4fv("mat", missile.target_mat);
-                        program.uniform1f("time", (diffTime - 1) / 3);
-                        context.drawArrays(context.TRIANGLE_STRIP, 0, 4);
-                    }
-
-                }
-            });
-            return self;
-        },
-        drawIcon: function () {
-            var self = this,
-                context = self.context;
-
-            var program = self.icon.program.use();
-            program.uniformMatrix4fv("mvp", self.camera.mvp);
-            program.uniform1f("scale", .05);
-            bindVertexBuffer(context, self.icon.buffer);
-            program.vertexAttribPointer("vertex", 3, context.FLOAT, false, 0, 0);
-            context.lineWidth(2);
-            each(self.items, function (missile) {
-                if (missile.alive) {
-
-                    var r = self.time - missile.start_time;
-
-                    if (r >= 1 && 2 > r) {
-                        program.uniformMatrix4fv("mat", missile.target_mat);
-                        program.uniform3fv("color", missile.color);
-                        program.uniform1f("time", r - 1);
-                        context.drawArrays(context.LINES, 0, self.icon.count);
-                    }
-                }
-            });
-            context.lineWidth(1);
-            return self;
-        },
-        /**
-         *
-         * @param source_coord
-         * @param target_coord
-         * @param style
-         * @param sacle
-         * @param angle
-         * @returns {Missile}
-         */
-        launch: function (source_coord, target_coord, style, sacle, angle) {
-            var self = this,
-                missile = self.getFreeMissile(),
-                color = color2Vec3(style),
-                camera = self.camera,
-                context = self.context,
-                bufferData = self.missile.bufferData;
-            sacle = sacle || 1;
-            angle = angle || 0;
-
-            missile.has_source = !!source_coord;
-
-            vec3.copy(missile.target_coord, target_coord);
-
-            vec3.copy(missile.color, color);
-
-            missile.start_time = timeNow();
-            missile.alive = true;
-
-            if (missile.has_source) {
-                vec3.copy(missile.source_coord, source_coord);
-                var p = vec2.distance(source_coord, target_coord),
-                    m = .01 * p,
-                    d = (target_coord[0] - source_coord[0]) / p,
-                    _ = (target_coord[1] - source_coord[1]) / p,
-                    b = 200,
-                    y = b * -_,
-                    T = b * d;
-
-                var w = MATH_COS(angle),
-                    E = MATH_SIN(angle),
-                    x = missile.index * 800,
-                    A = vec3.create(),
-                    M = vec3.create();
-                for (var R = 0; 100 > R; ++R) {
-                    var P = R / (100 - 1);
-                    vec3.lerp(M, source_coord, target_coord, P);
-                    var L = m * MATH_SIN(P * MATH_PI) * .15;
-                    M[0] += E * L * y;
-                    M[1] += E * L * T;
-                    M[2] += w * L;
-                    camera.projection(A, M);
-                    bufferData[x + 0] = A[0];
-                    bufferData[x + 1] = A[1];
-                    bufferData[x + 2] = A[2];
-                    bufferData[x + 3] = -P;
-                    bufferData[x + 4] = A[0];
-                    bufferData[x + 5] = A[1];
-                    bufferData[x + 6] = A[2];
-                    bufferData[x + 7] = P;
-                    x += 8
-                }
-                bindVertexBuffer(context, self.missile.buffer);
-                context.bufferSubData(context.ARRAY_BUFFER, 4 * missile.index * 800, missile.vertex);
-                if (missile.source_coord[2] < .015) {
-                    missile.projection(missile.source_mat, missile.source_coord, sacle, camera);
-                    missile.draw_source_impact = true
-                } else {
-                    missile.draw_source_impact = false
-
-                }
-            }
-            missile.projection(missile.target_mat, missile.target_coord, sacle, camera);
-            return this;
-        }
-    };
-
-    function MissileItem(index, vectors) {
-        this.vertex = vectors;
-        this.index = index;
-        this.source_coord = vec3.create();
-        this.target_coord = vec3.create();
-        this.source_mat = mat4.create();
-        this.target_mat = mat4.create();
-        this.start_time = 0;
-        this.alive = false;
-        this.color = vec3.create(0, 0, 0);
-        this.has_source = true;
-        this.has_target = true;
-        this.draw_source_impact = true;
-    }
-
-    MissileItem.prototype = {
-        constructor: MissileItem,
-        projection: function (mat, coord, sacle, camera) {
-            var o = vec3.create(),
-                a = vec3.create(),
-                l = vec3.create(),
-                f = vec3.create();
-            camera.projection(f, coord);
-            if (camera.projectionBlend > .5) {
-                vec3.normalize(l, f);
-                vec3.set(o, 0, 1, 0);
-                vec3.cross(o, l, o);
-                vec3.normalize(o, o);
-                vec3.cross(a, o, l);
-                mat[0] = o[0];
-                mat[1] = o[1];
-                mat[2] = o[2];
-                mat[4] = l[0];
-                mat[5] = l[1];
-                mat[6] = l[2];
-                mat[8] = a[0];
-                mat[9] = a[1];
-                mat[10] = a[2];
-            } else {
-                mat4.identity(mat);
-                mat4.rotateX(mat, mat, -.5 * MATH_PI);
-            }
-            sacle && mat4.scale(mat, mat, [sacle, sacle, sacle]);
-            mat[12] = f[0];
-            mat[13] = f[1];
-            mat[14] = f[2];
-        }
-    }
 
 })(window, document);

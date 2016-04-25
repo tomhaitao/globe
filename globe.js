@@ -1279,7 +1279,10 @@
             return vector;
         },
         copy: function (e, t) {
-            return e[0] = t[0], e[1] = t[1], e[2] = t[2], e
+            e[0] = t[0] || 0;
+            e[1] = t[1] || 0;
+            e[2] = t[2] || 0;
+            return e
         },
         set: function (e, t, r, n) {
             return e[0] = t, e[1] = r, e[2] = n, e

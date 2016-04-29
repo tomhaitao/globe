@@ -264,6 +264,7 @@
 
     }
 
+    window.each = each;
     /**
      * 深度克隆一个变量
      * @param source
@@ -430,6 +431,693 @@
         }
     }
 
+    var triangulateShape = (function () {
+        /**
+         * 返回两条线段的交点.
+         * @param inSeg1Pt1 要检查交点的第一条线的起始点
+         * @param inSeg1Pt2 要检查交点的第一条线的结束点
+         * @param inSeg2Pt1 要检查交点的第二条线的起始点
+         * @param inSeg2Pt2 要检查交点的第二条线的结束点
+         * @param inExcludeAdjacentSegs 是否排除相邻的线段
+         * @returns {*}
+         */
+        function intersectSegments2D(inSeg1Pt1, inSeg1Pt2, inSeg2Pt1, inSeg2Pt2, inExcludeAdjacentSegs) {
+
+            var seg1dx = inSeg1Pt2[0] - inSeg1Pt1[0], seg1dy = inSeg1Pt2[1] - inSeg1Pt1[1];
+            var seg2dx = inSeg2Pt2[0] - inSeg2Pt1[0], seg2dy = inSeg2Pt2[1] - inSeg2Pt1[1];
+
+            var seg1seg2dx = inSeg1Pt1[0] - inSeg2Pt1[0];
+            var seg1seg2dy = inSeg1Pt1[1] - inSeg2Pt1[1];
+
+            var limit = seg1dy * seg2dx - seg1dx * seg2dy;
+            var perpSeg1 = seg1dy * seg1seg2dx - seg1dx * seg1seg2dy;
+
+            if (Math.abs(limit) > Number.EPSILON) {
+
+                //两条线不平行
+                var perpSeg2;
+                if (limit > 0) {
+
+                    if (( perpSeg1 < 0 ) || ( perpSeg1 > limit ))        return [];
+                    perpSeg2 = seg2dy * seg1seg2dx - seg2dx * seg1seg2dy;
+                    if (( perpSeg2 < 0 ) || ( perpSeg2 > limit ))        return [];
+
+                } else {
+
+                    if (( perpSeg1 > 0 ) || ( perpSeg1 < limit ))        return [];
+                    perpSeg2 = seg2dy * seg1seg2dx - seg2dx * seg1seg2dy;
+                    if (( perpSeg2 > 0 ) || ( perpSeg2 < limit ))        return [];
+
+                }
+
+                // 交点位于第一条线的端点
+                if (perpSeg2 === 0) {
+
+                    if (( inExcludeAdjacentSegs ) &&
+                        ( ( perpSeg1 === 0 ) || ( perpSeg1 === limit ) ))        return [];
+                    return [inSeg1Pt1];
+
+                }
+                if (perpSeg2 === limit) {
+
+                    if (( inExcludeAdjacentSegs ) &&
+                        ( ( perpSeg1 === 0 ) || ( perpSeg1 === limit ) ))        return [];
+                    return [inSeg1Pt2];
+
+                }
+                // 交点位于第二条线的端点
+                if (perpSeg1 === 0)        return [inSeg2Pt1];
+                if (perpSeg1 === limit)    return [inSeg2Pt2];
+
+                // 返回真正的交点
+                var factorSeg1 = perpSeg2 / limit;
+                return [
+                    {
+                        x: inSeg1Pt1[0] + factorSeg1 * seg1dx,
+                        y: inSeg1Pt1[1] + factorSeg1 * seg1dy
+                    }
+                ];
+
+            } else {
+
+                // 返回真正的交点
+                if (( perpSeg1 !== 0 ) ||
+                    ( seg2dy * seg1seg2dx !== seg2dx * seg1seg2dy ))            return [];
+
+                // 两条线共线或无效
+                var seg1Pt = ( ( seg1dx === 0 ) && ( seg1dy === 0 ) );	// 第一条线只是一个点
+                var seg2Pt = ( ( seg2dx === 0 ) && ( seg2dy === 0 ) );	// 第二条线只是一个点
+                // 两条线都是点
+                if (seg1Pt && seg2Pt) {
+
+                    if (( inSeg1Pt1[0] !== inSeg2Pt1[0] ) ||
+                        ( inSeg1Pt1[1] !== inSeg2Pt1[1] ))        return [];	//  两个点不共点,返回空数组
+                    return [inSeg1Pt1];                 						//  共点
+
+                }
+                // 第一条线段是一个点
+                if (seg1Pt) {
+
+                    if (!pointInSegment2DColin(inSeg2Pt1, inSeg2Pt2, inSeg1Pt1))        return [];		// 不在第二条线段内,返回空数组
+                    return [inSeg1Pt1];
+
+                }
+                // 第二条线段是一个点
+                if (seg2Pt) {
+
+                    if (!pointInSegment2DColin(inSeg1Pt1, inSeg1Pt2, inSeg2Pt1))        return [];		// 不在第一条线段内,返回空数组
+                    return [inSeg2Pt1];
+
+                }
+
+                //  两条线共线,有可能重叠.
+                var seg1min, seg1max, seg1minVal, seg1maxVal;
+                var seg2min, seg2max, seg2minVal, seg2maxVal;
+                if (seg1dx !== 0) {
+
+                    // 线不是垂直的线
+                    if (inSeg1Pt1[0] < inSeg1Pt2[0]) {
+
+                        seg1min = inSeg1Pt1;
+                        seg1minVal = inSeg1Pt1[0];
+                        seg1max = inSeg1Pt2;
+                        seg1maxVal = inSeg1Pt2[0];
+
+                    } else {
+
+                        seg1min = inSeg1Pt2;
+                        seg1minVal = inSeg1Pt2[0];
+                        seg1max = inSeg1Pt1;
+                        seg1maxVal = inSeg1Pt1[0];
+
+                    }
+                    if (inSeg2Pt1[0] < inSeg2Pt2[0]) {
+
+                        seg2min = inSeg2Pt1;
+                        seg2minVal = inSeg2Pt1[0];
+                        seg2max = inSeg2Pt2;
+                        seg2maxVal = inSeg2Pt2[0];
+
+                    } else {
+
+                        seg2min = inSeg2Pt2;
+                        seg2minVal = inSeg2Pt2[0];
+                        seg2max = inSeg2Pt1;
+                        seg2maxVal = inSeg2Pt1[0];
+
+                    }
+
+                } else {
+
+                    // 是一个垂直的线
+                    if (inSeg1Pt1[1] < inSeg1Pt2[1]) {
+
+                        seg1min = inSeg1Pt1;
+                        seg1minVal = inSeg1Pt1[1];
+                        seg1max = inSeg1Pt2;
+                        seg1maxVal = inSeg1Pt2[1];
+
+                    } else {
+
+                        seg1min = inSeg1Pt2;
+                        seg1minVal = inSeg1Pt2[1];
+                        seg1max = inSeg1Pt1;
+                        seg1maxVal = inSeg1Pt1[1];
+
+                    }
+                    if (inSeg2Pt1[1] < inSeg2Pt2[1]) {
+
+                        seg2min = inSeg2Pt1;
+                        seg2minVal = inSeg2Pt1[1];
+                        seg2max = inSeg2Pt2;
+                        seg2maxVal = inSeg2Pt2[1];
+
+                    } else {
+
+                        seg2min = inSeg2Pt2;
+                        seg2minVal = inSeg2Pt2[1];
+                        seg2max = inSeg2Pt1;
+                        seg2maxVal = inSeg2Pt1[1];
+
+                    }
+
+                }
+                if (seg1minVal <= seg2minVal) {
+
+                    if (seg1maxVal < seg2minVal)    return [];
+                    if (seg1maxVal === seg2minVal) {
+
+                        if (inExcludeAdjacentSegs)        return [];
+                        return [seg2min];
+
+                    }
+                    if (seg1maxVal <= seg2maxVal)    return [seg2min, seg1max];
+                    return [seg2min, seg2max];
+
+                } else {
+
+                    if (seg1minVal > seg2maxVal)    return [];
+                    if (seg1minVal === seg2maxVal) {
+
+                        if (inExcludeAdjacentSegs)        return [];
+                        return [seg1min];
+
+                    }
+                    if (seg1maxVal <= seg2maxVal)    return [seg1min, seg1max];
+                    return [seg1min, seg2max];
+
+                }
+
+            }
+
+        }
+
+        /**
+         * 从拉伸几何体中删除孔洞
+         * @param contour 拉伸几何体的顶点数据
+         * @param holes 空洞的顶点数据
+         * @returns {Array} 返回没有镂空(孔洞)的拉伸几何体
+         */
+        function removeHoles(contour, holes) {
+
+            var shape = contour.concat();
+            var hole;
+
+            function isCutLineInsideAngles(inShapeIdx, inHoleIdx) {
+
+                // 检查孔点是否位于形状的附近
+                var lastShapeIdx = shape.length - 1;
+
+                var prevShapeIdx = inShapeIdx - 1;
+                if (prevShapeIdx < 0)            prevShapeIdx = lastShapeIdx;
+
+                var nextShapeIdx = inShapeIdx + 1;
+                if (nextShapeIdx > lastShapeIdx)    nextShapeIdx = 0;
+
+                var insideAngle = isPointInsideAngle(shape[inShapeIdx], shape[prevShapeIdx], shape[nextShapeIdx], hole[inHoleIdx]);
+                if (!insideAngle) {
+
+                    return false;
+
+                }
+
+                // Check if shape point lies within angle around hole point
+                var lastHoleIdx = hole.length - 1;
+
+                var prevHoleIdx = inHoleIdx - 1;
+                if (prevHoleIdx < 0)            prevHoleIdx = lastHoleIdx;
+
+                var nextHoleIdx = inHoleIdx + 1;
+                if (nextHoleIdx > lastHoleIdx)    nextHoleIdx = 0;
+
+                insideAngle = isPointInsideAngle(hole[inHoleIdx], hole[prevHoleIdx], hole[nextHoleIdx], shape[inShapeIdx]);
+                if (!insideAngle) {
+
+                    // console.log( "Vertex (Hole): " + inHoleIdx + ", Point: " + shape[inShapeIdx][0] + "/" + shape[inShapeIdx][1] );
+                    return false;
+
+                }
+
+                return true;
+
+            }
+
+            function intersectsShapeEdge(inShapePt, inHolePt) {
+
+                // checks for intersections with shape edges
+                var sIdx, nextIdx, intersection;
+                for (sIdx = 0; sIdx < shape.length; sIdx++) {
+
+                    nextIdx = sIdx + 1;
+                    nextIdx %= shape.length;
+                    intersection = intersectSegments2D(inShapePt, inHolePt, shape[sIdx], shape[nextIdx], true);
+                    if (intersection.length > 0)        return true;
+
+                }
+
+                return false;
+
+            }
+
+            var indepHoles = [];
+
+            function intersectsHoleEdge(inShapePt, inHolePt) {
+
+                // checks for intersections with hole edges
+                var ihIdx, chkHole,
+                    hIdx, nextIdx, intersection;
+                for (ihIdx = 0; ihIdx < indepHoles.length; ihIdx++) {
+
+                    chkHole = holes[indepHoles[ihIdx]];
+                    for (hIdx = 0; hIdx < chkHole.length; hIdx++) {
+
+                        nextIdx = hIdx + 1;
+                        nextIdx %= chkHole.length;
+                        intersection = intersectSegments2D(inShapePt, inHolePt, chkHole[hIdx], chkHole[nextIdx], true);
+                        if (intersection.length > 0)        return true;
+
+                    }
+
+                }
+                return false;
+
+            }
+
+            var holeIndex, shapeIndex,
+                shapePt, holePt,
+                holeIdx, cutKey, failedCuts = [],
+                tmpShape1, tmpShape2,
+                tmpHole1, tmpHole2;
+
+            for (var h = 0, hl = holes.length; h < hl; h++) {
+
+                indepHoles.push(h);
+
+            }
+
+            var minShapeIndex = 0;
+            var counter = indepHoles.length * 2;
+            while (indepHoles.length > 0) {
+
+                counter--;
+                if (counter < 0) {
+
+                    console.log("Infinite Loop! Holes left:" + indepHoles.length + ", Probably Hole outside Shape!");
+                    break;
+
+                }
+
+                // search for shape-vertex and hole-vertex,
+                // which can be connected without intersections
+                for (shapeIndex = minShapeIndex; shapeIndex < shape.length; shapeIndex++) {
+
+                    shapePt = shape[shapeIndex];
+                    holeIndex = -1;
+
+                    // search for hole which can be reached without intersections
+                    for (var h = 0; h < indepHoles.length; h++) {
+
+                        holeIdx = indepHoles[h];
+
+                        // prevent multiple checks
+                        cutKey = shapePt[0] + ":" + shapePt[1] + ":" + holeIdx;
+                        if (failedCuts[cutKey] !== undefined)            continue;
+
+                        hole = holes[holeIdx];
+                        for (var h2 = 0; h2 < hole.length; h2++) {
+
+                            holePt = hole[h2];
+                            if (!isCutLineInsideAngles(shapeIndex, h2))        continue;
+                            if (intersectsShapeEdge(shapePt, holePt))        continue;
+                            if (intersectsHoleEdge(shapePt, holePt))        continue;
+
+                            holeIndex = h2;
+                            indepHoles.splice(h, 1);
+
+                            tmpShape1 = shape.slice(0, shapeIndex + 1);
+                            tmpShape2 = shape.slice(shapeIndex);
+                            tmpHole1 = hole.slice(holeIndex);
+                            tmpHole2 = hole.slice(0, holeIndex + 1);
+
+                            shape = tmpShape1.concat(tmpHole1).concat(tmpHole2).concat(tmpShape2);
+
+                            minShapeIndex = shapeIndex;
+
+                            // Debug only, to show the selected cuts
+                            // glob_CutLines.push( [ shapePt, holePt ] );
+
+                            break;
+
+                        }
+                        if (holeIndex >= 0)    break;		// hole-vertex found
+
+                        failedCuts[cutKey] = true;			// remember failure
+
+                    }
+                    if (holeIndex >= 0)    break;		// hole-vertex found
+
+                }
+
+            }
+
+            return shape;
+            /* shape with no holes */
+
+        }
+
+        function snip(contour, u, v, w, n, verts) {
+
+            var p;
+            var ax, ay, bx, by;
+            var cx, cy, px, py;
+
+            ax = contour[verts[u]][0];
+            ay = contour[verts[u]][1];
+
+            bx = contour[verts[v]][0];
+            by = contour[verts[v]][1];
+
+            cx = contour[verts[w]][0];
+            cy = contour[verts[w]][1];
+
+            if (Number.EPSILON > ( ( ( bx - ax ) * ( cy - ay ) ) - ( ( by - ay ) * ( cx - ax ) ) )) return false;
+
+            var aX, aY, bX, bY, cX, cY;
+            var apx, apy, bpx, bpy, cpx, cpy;
+            var cCROSSap, bCROSScp, aCROSSbp;
+
+            aX = cx - bx;
+            aY = cy - by;
+            bX = ax - cx;
+            bY = ay - cy;
+            cX = bx - ax;
+            cY = by - ay;
+
+            for (p = 0; p < n; p++) {
+
+                px = contour[verts[p]][0];
+                py = contour[verts[p]][1];
+
+                if (( ( px === ax ) && ( py === ay ) ) ||
+                    ( ( px === bx ) && ( py === by ) ) ||
+                    ( ( px === cx ) && ( py === cy ) ))    continue;
+
+                apx = px - ax;
+                apy = py - ay;
+                bpx = px - bx;
+                bpy = py - by;
+                cpx = px - cx;
+                cpy = py - cy;
+
+                // see if p is inside triangle abc
+
+                aCROSSbp = aX * bpy - aY * bpx;
+                cCROSSap = cX * apy - cY * apx;
+                bCROSScp = bX * cpy - bY * cpx;
+
+                if (( aCROSSbp >= -Number.EPSILON ) && ( bCROSScp >= -Number.EPSILON ) && ( cCROSSap >= -Number.EPSILON )) return false;
+
+            }
+
+            return true;
+
+        }
+
+        function triangulate(contour, indices) {
+
+            var n = contour.length;
+
+            if (n < 3) return null;
+
+            var result = [],
+                verts = [],
+                vertIndices = [];
+
+            /* we want a counter-clockwise polygon in verts */
+
+            var u, v, w, area = 0.0;
+
+            for (var p = n - 1, i = 0; i < n; p = i++) {
+
+                area += contour[p][0] * contour[i][1] - contour[i][0] * contour[p][1];
+
+            }
+
+            if (area * 0.5 > 0.0) {
+
+                for (v = 0; v < n; v++) {
+                    verts[v] = v;
+                }
+
+            } else {
+
+                for (v = 0; v < n; v++) {
+                    verts[v] = ( n - 1 ) - v;
+                }
+
+            }
+
+            var nv = n;
+
+            /*  remove nv - 2 vertices, creating 1 triangle every time */
+
+            var count = 2 * nv;
+            /* error detection */
+
+            for (v = nv - 1; nv > 2;) {
+
+                /* if we loop, it is probably a non-simple polygon */
+
+                if (( count-- ) <= 0) {
+
+                    //** Triangulate: ERROR - probable bad polygon!
+
+                    //throw ( "Warning, unable to triangulate polygon!" );
+                    //return null;
+                    // Sometimes warning is fine, especially polygons are triangulated in reverse.
+                    //可能发生了处理的情况
+
+                    if (indices) return vertIndices;
+                    return result;
+
+                }
+
+                /* three consecutive vertices in current polygon, <u,v,w> */
+
+                u = v;
+                if (nv <= u) u = 0;
+                /* previous */
+                v = u + 1;
+                if (nv <= v) v = 0;
+                /* new v    */
+                w = v + 1;
+                if (nv <= w) w = 0;
+                /* next     */
+
+                if (snip(contour, u, v, w, nv, verts)) {
+
+                    var a, b, c, s, t;
+
+                    /* true names of the vertices */
+
+                    a = verts[u];
+                    b = verts[v];
+                    c = verts[w];
+
+                    /* output Triangle */
+
+                    result.push([
+                        contour[a],
+                        contour[b],
+                        contour[c]
+                    ]);
+
+                    vertIndices.push([verts[u], verts[v], verts[w]]);
+
+                    /* remove v from the remaining polygon */
+
+                    for (s = v, t = v + 1; t < nv; s++, t++) {
+
+                        verts[s] = verts[t];
+
+                    }
+
+                    nv--;
+
+                    /* reset error detection counter */
+
+                    count = 2 * nv;
+
+                }
+
+            }
+
+            if (indices) return vertIndices;
+            return result;
+
+        }
+
+        function pointInSegment2DColin(inSegPt1, inSegPt2, inOtherPt) {
+
+            // inOtherPt needs to be collinear to the inSegment
+            if (inSegPt1[0] !== inSegPt2[0]) {
+
+                if (inSegPt1[0] < inSegPt2[0]) {
+
+                    return ( ( inSegPt1[0] <= inOtherPt[0] ) && ( inOtherPt[0] <= inSegPt2[0] ) );
+
+                } else {
+
+                    return ( ( inSegPt2[0] <= inOtherPt[0] ) && ( inOtherPt[0] <= inSegPt1[0] ) );
+
+                }
+
+            } else {
+
+                if (inSegPt1[1] < inSegPt2[1]) {
+
+                    return ( ( inSegPt1[1] <= inOtherPt[1] ) && ( inOtherPt[1] <= inSegPt2[1] ) );
+
+                } else {
+
+                    return ( ( inSegPt2[1] <= inOtherPt[1] ) && ( inOtherPt[1] <= inSegPt1[1] ) );
+
+                }
+
+            }
+
+        }
+
+        function isPointInsideAngle(inVertex, inLegFromPt, inLegToPt, inOtherPt) {
+
+            // The order of legs is important
+
+            // translation of all points, so that Vertex is at (0,0)
+            var legFromPtX = inLegFromPt[0] - inVertex[0], legFromPtY = inLegFromPt[1] - inVertex[1];
+            var legToPtX = inLegToPt[0] - inVertex[0], legToPtY = inLegToPt[1] - inVertex[1];
+            var otherPtX = inOtherPt[0] - inVertex[0], otherPtY = inOtherPt[1] - inVertex[1];
+
+            // main angle >0: < 180 deg.; 0: 180 deg.; <0: > 180 deg.
+            var from2toAngle = legFromPtX * legToPtY - legFromPtY * legToPtX;
+            var from2otherAngle = legFromPtX * otherPtY - legFromPtY * otherPtX;
+
+            if (Math.abs(from2toAngle) > Number.EPSILON) {
+
+                // angle != 180 deg.
+
+                var other2toAngle = otherPtX * legToPtY - otherPtY * legToPtX;
+                // console.log( "from2to: " + from2toAngle + ", from2other: " + from2otherAngle + ", other2to: " + other2toAngle );
+
+                if (from2toAngle > 0) {
+
+                    // main angle < 180 deg.
+                    return ( ( from2otherAngle >= 0 ) && ( other2toAngle >= 0 ) );
+
+                } else {
+
+                    // main angle > 180 deg.
+                    return ( ( from2otherAngle >= 0 ) || ( other2toAngle >= 0 ) );
+
+                }
+
+            } else {
+
+                // angle == 180 deg.
+                // console.log( "from2to: 180 deg., from2other: " + from2otherAngle  );
+                return ( from2otherAngle > 0 );
+
+            }
+
+        }
+
+        return function (contour, holes) {
+
+            var i, il, f, face,
+                key, index,
+                allPointsMap = {};
+
+            // To maintain reference to old shape, one must match coordinates, or offset the indices from original arrays. It's probably easier to do the first.
+
+            var allpoints = contour.concat();
+            holes = holes || [];
+
+            for (var h = 0, hl = holes.length; h < hl; h++) {
+
+                Array.prototype.push.apply(allpoints, holes[h]);
+
+            }
+
+            //console.log( "allpoints",allpoints, allpoints.length );
+
+            // prepare all points map
+
+            for (i = 0, il = allpoints.length; i < il; i++) {
+
+                key = allpoints[i][0] + ":" + allpoints[i][1];
+
+                if (allPointsMap[key] !== undefined) {
+                    //出现重复的点
+                }
+
+                allPointsMap[key] = i;
+
+            }
+
+            // remove holes by cutting paths to holes and adding them to the shape
+            var shapeWithoutHoles = removeHoles(contour, holes);
+
+            var triangles = triangulate(shapeWithoutHoles, false); // True returns indices for points of spooled shape
+            //console.log( "triangles",triangles, triangles.length );
+
+            // check all face vertices against all points map
+
+            for (i = 0, il = triangles.length; i < il; i++) {
+
+                face = triangles[i];
+
+                for (f = 0; f < 3; f++) {
+
+                    key = face[f][0] + ":" + face[f][1];
+
+                    index = allPointsMap[key];
+
+                    if (index !== undefined) {
+
+                        face[f] = index;
+
+                    }
+
+                }
+
+            }
+
+            return triangles.concat();
+
+        }
+
+    })();
+
+    
     /**
      * 生成缓冲区
      * @param gl            webgl
@@ -3759,7 +4447,7 @@
             var program = self.missile.program.use();
             program.uniformMatrix4fv("mvp", camera.mvp);
             program.uniform3fv("view_position", camera.viewPos);
-            program.uniform1f("width", .1);
+            program.uniform1f("width", 1);
             bindVertexBuffer(context, this.missile.buffer);
             program.vertexAttribPointer("position", 4, context.FLOAT, !1, 0, 0);
             each(items, function (missile) {
@@ -3768,12 +4456,11 @@
                     var time = self.time - missile.start_time;
 
                     if (2 > time) {
-
+                        console.log(time);
                         program.uniform1f("time", .5 * time);
                         program.uniform3fv("color", missile.color);
-                        var a = 200,
-                            i = a * missile.index;
-                        context.drawArrays(context.TRIANGLE_STRIP, i, a)
+                        var a = 200;
+                        context.drawArrays(context.TRIANGLE_STRIP, a * missile.index, a)
                     }
                 }
             });
@@ -4254,26 +4941,24 @@
                 b = vec3.create(),
                 y = 14,
                 coastHeight = self.globe.options.coast.height,
-                addVert = function () {
+                addVert = function (index, height) {
                     var a = vec3.create(),
                         u = vec2.create();
-                    return function (e, t) {
-                        a[0] = 180 * geom.verts[2 * e + 0] / 32768;
-                        a[1] = 90 * geom.verts[2 * e + 1] / 32768;
-                        a[2] = t;
-                        u[0] = .5 + a[0] / 360;
-                        u[1] = .5 - a[1] / 180;
-                        var r = vertexs.length / 14;
-                        project_mercator(i, a);
-                        vertexs.push(i[0], i[1], i[2]);
-                        vertexs.push(0, 0, 0);
-                        project_ecef(i, a);
-                        vertexs.push(i[0], i[1], i[2]);
-                        vertexs.push(0, 0, 0);
-                        vertexs.push(u[0], u[1]);
-                        return r
-                    }
-                }();
+                    a[0] = 180 * geom.verts[2 * index + 0] / 32768;
+                    a[1] = 90 * geom.verts[2 * index + 1] / 32768;
+                    a[2] = height;
+                    u[0] = .5 + a[0] / 360;
+                    u[1] = .5 - a[1] / 180;
+                    var r = vertexs.length / 14;
+                    project_mercator(i, a);
+                    vertexs.push(i[0], i[1], i[2]);
+                    vertexs.push(0, 0, 0);
+                    project_ecef(i, a);
+                    vertexs.push(i[0], i[1], i[2]);
+                    vertexs.push(0, 0, 0);
+                    vertexs.push(u[0], u[1]);
+                    return r
+                };
 
             for (var l = 0; geom.verts.length > l; ++l) {
                 addVert(l, 0);
@@ -4512,7 +5197,7 @@
                 mainProgram.uniform1f("height", 0);
                 mainProgram.uniform1f("tone", country.tone);
                 mainProgram.uniform1f("offset_x", 0);
-                context.drawElements(context.TRIANGLES, country.faceCount, context.UNSIGNED_SHORT, country.faceOffset << 1);
+                // context.drawElements(context.TRIANGLES, country.faceCount, context.UNSIGNED_SHORT, country.faceOffset << 1);
                 if (showOffset) {
                     mainProgram.uniform1f("offset_x", -20);
                     context.drawElements(context.TRIANGLES, country.faceCount, context.UNSIGNED_SHORT, country.faceOffset << 1);
@@ -4635,49 +5320,97 @@
                 context.drawElements(context.LINES, metry.count, context.UNSIGNED_SHORT, 0);
                 context.lineWidth(1);
                 context.depthMask(true);
+                self.drawProvince();
 
-                //画高亮国家的边界线
-                // if (hoverCountry) {
-                //     if (self.borderedCountry !== hoverCountry.index) {
-                //         var r = [],
-                //             borders = hoverCountry.border,
-                //             o = -1;
-                //         for (var a = 0; a < borders.length; ++a) {
-                //             var i = borders[a];
-                //             if (65535 != i) {
-                //                 if (o >= 0) {
-                //                     r.push(o, i);
-                //                 }
-                //                 o = i
-                //             } else {
-                //                 o = -1;
-                //             }
-                //
-                //         }
-                //         context.bindBuffer(context.ELEMENT_ARRAY_BUFFER, self.border.buffer);
-                //         context.bufferData(context.ELEMENT_ARRAY_BUFFER, new Uint16Array(r), context.STATIC_DRAW);
-                //         self.border.count = r.length;
-                //         self.borderedCountry = hoverCountry.index;
-                //     }
-                //     if (self.border.count) {
-                //         var f = self.programs.line.use();
-                //         var hoverColor = color2Vec3(options.boundary.hover.color);
-                //         f.uniformMatrix4fv("mvp", camera.mvp);
-                //         f.vertexAttribPointer("position", 3, context.FLOAT, false, map_stride_bytes, 0);
-                //         f.vertexAttribPointer("normal", 3, context.FLOAT, false, map_stride_bytes, 12);
-                //         f.vertexAttribPointer("position2", 3, context.FLOAT, false, map_stride_bytes, 24);
-                //         f.vertexAttribPointer("normal2", 3, context.FLOAT, false, map_stride_bytes, 36);
-                //         f.uniform1f("blend", blend);
-                //         f.uniform1f("height", 0);
-                //         f.uniform4f("color", hoverColor[0], hoverColor[1], hoverColor[2], 1);
-                //         bindElementBuffer(context, self.border.buffer);
-                //         context.lineWidth(pick(options.boundary.hover.width, 1));
-                //         context.drawElements(context.LINES, self.border.count, context.UNSIGNED_SHORT, 0);
-                //         context.lineWidth(1)
-                //     }
                 // }
             }
             return self;
+        },
+        buildProvince: function () {
+            var self = this,
+                context = self.context,
+                vertexs = [],
+                elements = [];
+            each(chinaGeoMetry, function (province) {
+                each(province.coordinates, function (border) {
+                    for (var i = 0; i < border.length; i++) {
+                        var a = vec3.create(),
+                            u = vec2.create(),
+                            tmp = vec3.create();
+                        a[0] = border[i][0];
+                        a[1] = border[i][1];
+                        a[2] = 0;
+                        u[0] = .5 + a[0] / 360;
+                        u[1] = .5 - a[1] / 180;
+                        var r = vertexs.length / 14;
+                        project_mercator(tmp, a);
+                        vertexs.push(tmp[0], tmp[1], tmp[2]);
+                        vertexs.push(0, 0, 0);
+                        project_ecef(tmp, a);
+                        vertexs.push(tmp[0], tmp[1], tmp[2]);
+                        vertexs.push(0, 0, 0);
+                        vertexs.push(u[0], u[1]);
+
+                        // if (i < border.length - 1) {
+                        //     elements.push(r, r + 1);
+                        // }
+                    }
+                })
+            });
+            var a = triangulateShape(chinaGeoMetry[0].coordinates[0]);
+
+            each(a, function (vert) {
+
+                elements= elements.concat(vert);
+            });
+
+
+            self.province = {
+                buffer: makeVertexBuffer(context, new FLOAT32_ARRAY(vertexs)),
+                elements: makeElementBuffer(context, new Uint16Array(elements)),
+                elementsCount: elements.length,
+                vertexs: vertexs,
+            };
+            self.buildProvinced = true;
+        },
+        drawProvince: function () {
+            var self = this,
+                context = self.context,
+                camera = self.camera,
+                metry = self.geoMetry.line,
+                map_stride_bytes = self.geoMetry.map.strideBytes;
+
+            context.enable(context.DEPTH_TEST);
+            context.depthMask(false);
+            var lineProgram = metry.program.use();
+
+            if (self.buildProvinced !== true) {
+                self.buildProvince();
+            }
+            bindVertexBuffer(context, self.province.buffer);
+
+            lineProgram.uniformMatrix4fv("mvp", camera.mvp);
+            lineProgram.vertexAttribPointer("position", 3, context.FLOAT, false, map_stride_bytes, 0);
+            lineProgram.vertexAttribPointer("normal", 3, context.FLOAT, false, map_stride_bytes, 12);
+            lineProgram.vertexAttribPointer("position2", 3, context.FLOAT, false, map_stride_bytes, 24);
+            lineProgram.vertexAttribPointer("normal2", 3, context.FLOAT, false, map_stride_bytes, 36);
+            lineProgram.uniform1f("blend", camera.blend);
+
+            lineProgram.uniform1f("height", .1);
+
+            var level = MATH_MAX(MATH_MIN(MATH.round(camera.coordinate[2] * 100), 85), 35);
+            var alpha = 1 - ((level - 35) / 50);
+            var options = self.globe.getOptions("boundary");
+            var color = color2Vec3(options.color);
+            lineProgram.uniform4f("color", 1, 1, 1, 1);
+
+            // context.lineWidth(1);
+            bindElementBuffer(context, self.province.elements);
+            context.drawElements(context.TRIANGLES, self.province.elementsCount, context.UNSIGNED_SHORT, 0);
+
+            context.lineWidth(1);
+            context.depthMask(true);
+
         },
         /**
          * 画国家和城市名称
@@ -5261,7 +5994,7 @@
                 //背景星星的数量
                 count: 10000,
                 //星星透明度
-                alpha: .5,
+                alpha: 1,
                 //星星颜色
                 color: "#fff"
             },

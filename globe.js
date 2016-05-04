@@ -1117,7 +1117,6 @@
 
     })();
 
-
     /**
      * 生成缓冲区
      * @param gl            webgl
@@ -1264,12 +1263,12 @@
         "corona": "attribute vec4 vertex;\nvarying vec2 v_texcoord;\nuniform mat4 mvp;\nuniform mat3 bill;\nuniform sampler2D t_smoke;\nuniform float time;\nuniform vec4 color;\n",
         "corona.vertex": "void main() {\n    float s = 10.0 + (10.0 * vertex.w);\n    vec3 P = vec3(s * vertex.xy, 0);\n    P = bill * P;\n    gl_Position = mvp * vec4(P, 1.0);\n    v_texcoord = vertex.zw;\n}\n",
         "corona.fragment": "void main() {\n    vec2 uv = vec2(5.0*v_texcoord.x + 0.01*time, 0.8 - 1.5*v_texcoord.y);\n    float smoke = texture2D(t_smoke, uv).r;\n    uv = vec2(3.0*v_texcoord.x - 0.007*time, 0.9 - 0.5*v_texcoord.y);\n vec3 color1 = vec3(0,0,0);\n   smoke *= 1.5*texture2D(t_smoke, uv).r;\n\n    float t = pow(v_texcoord.y, 0.25);\n    gl_FragColor.rgb = mix(color.rgb,color1, t) + 0.3*smoke;\ngl_FragColor.a = color.a;\n}\n",
-        "mark": "attribute vec2 coord;\nvarying vec2 v_texcoord;\nuniform mat4 mvp;\nuniform mat3 bill;\nuniform mat4 mat;\nuniform vec3 pos;\nuniform sampler2D t_sharp;\nuniform sampler2D t_fuzzy;\nuniform vec4 color;\nuniform float scale;\nuniform float fuzz;\n",
-        "mark.vertex": "void main() {\n    v_texcoord = vec2(coord.x, 1.0 - coord.y);\n    vec3 P = (bill * scale * vec3(2.0*(coord.x-0.5), 2.0*coord.y, 0.0)) + pos;\n    gl_Position = mvp * vec4(P, 1.0);\n}\n",
-        "mark.fragment": "void main() {\n    vec4 C = mix(texture2D(t_sharp, v_texcoord), texture2D(t_fuzzy, v_texcoord), fuzz);\n    float alpha = C.x;\n    gl_FragColor = vec4(color.xyz, alpha);\n}",
-        "mark_pick": "attribute vec2 coord;\n varying vec2 v_texcoord;\n uniform mat4 mvp;\n uniform mat3 bill;\n uniform vec3 pos;\n uniform float color;\n uniform float scale;",
-        "mark_pick.vertex": "void main() {\n   v_texcoord = vec2(coord.x, 1.0 - coord.y);\n   vec3 P = (bill * scale * vec3(2.0*(coord.x-0.5), 2.0*coord.y, 0.0)) + pos;\n   gl_Position = mvp * vec4(P, 1.0);\n  }",
-        "mark_pick.fragment": "void main() {\n   gl_FragColor = vec4(color, 0.0, 0.0, 1.0);\n }",
+        "marker": "attribute vec2 coord;\nvarying vec2 v_texcoord;\nuniform mat4 mvp;\nuniform mat3 bill;\nuniform mat4 mat;\nuniform vec3 pos;\nuniform sampler2D t_sharp;\nuniform sampler2D t_fuzzy;\nuniform vec4 color;\nuniform float scale;\nuniform float fuzz;\n",
+        "marker.vertex": "void main() {\n    v_texcoord = vec2(coord.x, 1.0 - coord.y);\n    vec3 P = (bill * scale * vec3(2.0*(coord.x-0.5), 2.0*coord.y, 0.0)) + pos;\n    gl_Position = mvp * vec4(P, 1.0);\n}\n",
+        "marker.fragment": "void main() {\n    vec4 C = mix(texture2D(t_sharp, v_texcoord), texture2D(t_fuzzy, v_texcoord), fuzz);\n    float alpha = C.x;\n    gl_FragColor = vec4(color.xyz, alpha);\n}",
+        "marker_pick": "attribute vec2 coord;\n varying vec2 v_texcoord;\n uniform mat4 mvp;\n uniform mat3 bill;\n uniform vec3 pos;\n uniform float color;\n uniform float scale;",
+        "marker_pick.vertex": "void main() {\n   v_texcoord = vec2(coord.x, 1.0 - coord.y);\n   vec3 P = (bill * scale * vec3(2.0*(coord.x-0.5), 2.0*coord.y, 0.0)) + pos;\n   gl_Position = mvp * vec4(P, 1.0);\n  }",
+        "marker_pick.fragment": "void main() {\n   gl_FragColor = vec4(color, 0.0, 0.0, 1.0);\n }",
         "connector": "attribute vec4 position;\nuniform mat4 mvp;\nuniform vec4 color;\n",
         "connector.vertex": "void main() {\n    vec3 P = position.xyz;\n    float side = position.w;\n    if (side > 0.5)\n        gl_Position = mvp * vec4(P, 1.0);\n    else\n        gl_Position = vec4(P, 1.0);\n}\n",
         "connector.fragment": "void main() {\n    gl_FragColor = color;\n}\n\n\n",
@@ -4533,7 +4532,7 @@
          * @param angle
          * @returns {Missile}
          */
-        launch: function (style,source_coord, target_coord,  sacle, angle) {
+        launch: function (style, source_coord, target_coord, sacle, angle) {
             var self = this,
                 missile = self.getFreeMissile(),
                 color = color2Vec3(style),
@@ -4601,6 +4600,12 @@
         }
     };
 
+    /**
+     * 单个导弹
+     * @param index
+     * @param vectors
+     * @constructor
+     */
     function MissileItem(index, vectors) {
         this.vertex = vectors;
         this.index = index;
@@ -4647,6 +4652,144 @@
             mat[12] = f[0];
             mat[13] = f[1];
             mat[14] = f[2];
+        }
+    };
+
+    /**
+     *
+     * @constructor
+     */
+    function Marker(context, camera) {
+        var self = this;
+        self.camera = camera;
+        self.context = context;
+        self.buffer = makeVertexBuffer(context, new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0]));
+        self.texture = loadTexture2D(context, resource("texture/marker.png"), {mipmap: false});
+        self.program = getProgram(context, "marker");
+        self.pickProgram = getProgram(context, "marker_pick");
+        self.markers = [];
+    }
+
+    Marker.prototype = {
+        constructor: Marker,
+        addMarker: function (marker) {
+
+            this.markers.push(marker);
+
+            return marker;
+        },
+        render: function () {
+            var self = this,
+                camera = self.camera,
+                gl = self.context;
+
+            gl.enable(gl.DEPTH_TEST);
+            gl.enable(gl.BLEND);
+            gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+            gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+
+            bindVertexBuffer(gl, self.buffer);
+            var program = self.program.use();
+            program.uniformMatrix3fv("bill", camera.bill);
+            program.uniformMatrix4fv("mvp", camera.mvp);
+            program.uniformSampler2D("t_sharp", self.texture);
+            program.uniform1f("scale", .05);
+            program.vertexAttribPointer("coord", 3, gl.FLOAT, false, 0, 0);
+
+            each(self.markers, function (marker) {
+                var pos = vec3.create();
+
+                camera.projection(pos, marker.coord);
+
+                program.uniform3fv("pos", pos);
+
+                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+            });
+        },
+        pick: function (mouseX, mouseY) {
+            var self = this,
+                gl = self.context,
+                range = 2,
+                camera = self.camera,
+                data = new Uint8Array(range * range << 2),
+                viewport = camera.viewport,
+                mvp = mat4.create();
+
+            function getFrameBuffer() {
+                if (!self.framebuffer) {
+                    self.framebuffer = gl.createFramebuffer();
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, self.framebuffer);
+                    var e = createTexture2D(gl,{
+                        size: range
+                    });
+                    gl.bindTexture(gl.TEXTURE_2D, e);
+                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, e, 0);
+                    var n = gl.createRenderbuffer();
+                    gl.bindRenderbuffer(gl.RENDERBUFFER, n);
+                    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, range, range);
+                    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, n);
+                    gl.bindRenderbuffer(gl.RENDERBUFFER, null);
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+                }
+                return self.framebuffer;
+            }
+
+            mat4.identity(mvp);
+            mat4.translate(mvp, mvp, [
+                (viewport[2] - 2 * (mouseX - viewport[0])) / range,
+                -(viewport[3] - 2 * (mouseY - viewport[1])) / range,
+                0
+            ]);
+
+            mat4.scale(mvp, mvp, [viewport[2] / range, viewport[3] / range, 1]);
+            mat4.multiply(mvp, mvp, camera.mvp);
+
+            gl.viewport(0, 0, range, range);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, getFrameBuffer());
+            gl.clearColor(0, 0, 1, 0);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+            gl.disable(gl.BLEND);
+            gl.enable(gl.CULL_FACE);
+            gl.cullFace(gl.BACK);
+            gl.enable(gl.DEPTH_TEST);
+
+            bindVertexBuffer(gl, self.buffer);
+
+            var program = self.pickProgram.use();
+
+            program.uniformMatrix4fv("mvp", mvp);
+            program.uniformMatrix3fv("bill", camera.bill);
+            program.uniform1f("scale", .05);
+            program.vertexAttribPointer("coord", 3, gl.FLOAT, false, 0, 0);
+
+            each(this.markers, function (logo, index) {
+                var pos = vec3.create();
+                camera.projection(pos, logo.coord);
+                program.uniform3fv("pos", pos);
+                program.uniform1f("color", index / 255);
+                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+            });
+
+            gl.disable(gl.CULL_FACE);
+            gl.disable(gl.DEPTH_TEST);
+            gl.readPixels(0, 0, range, range, gl.RGBA, gl.UNSIGNED_BYTE, data);
+
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            gl.viewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+            var h = null,
+                m = 0,
+                d = {};
+
+            for (var b = 0; b < data.length; b += 4) {
+                if (data[b + 3]) {
+                    var y = data[b + 1] << 8 | data[b + 0],
+                        T = d[y] || 0;
+                    d[y] = ++T;
+                    T > m && (h = y, m = T)
+                }
+            }
+            return h;
         }
     };
 
@@ -5565,6 +5708,7 @@
          */
         self.missile = new Missile(context, camera, self);
 
+        self.marker = new Marker(context, camera, self);
         self.resize();
     }
 
@@ -5621,6 +5765,8 @@
             self.world.render();
 
             self.missile.render();
+
+            self.marker.render();
 
             self.dispatch("render.end");
 

@@ -5197,7 +5197,7 @@
                 mainProgram.uniform1f("height", 0);
                 mainProgram.uniform1f("tone", country.tone);
                 mainProgram.uniform1f("offset_x", 0);
-                // context.drawElements(context.TRIANGLES, country.faceCount, context.UNSIGNED_SHORT, country.faceOffset << 1);
+                context.drawElements(context.TRIANGLES, country.faceCount, context.UNSIGNED_SHORT, country.faceOffset << 1);
                 if (showOffset) {
                     mainProgram.uniform1f("offset_x", -20);
                     context.drawElements(context.TRIANGLES, country.faceCount, context.UNSIGNED_SHORT, country.faceOffset << 1);
@@ -5320,97 +5320,9 @@
                 context.drawElements(context.LINES, metry.count, context.UNSIGNED_SHORT, 0);
                 context.lineWidth(1);
                 context.depthMask(true);
-                self.drawProvince();
 
-                // }
             }
             return self;
-        },
-        buildProvince: function () {
-            var self = this,
-                context = self.context,
-                vertexs = [],
-                elements = [];
-            each(chinaGeoMetry, function (province) {
-                each(province.coordinates, function (border) {
-                    for (var i = 0; i < border.length; i++) {
-                        var a = vec3.create(),
-                            u = vec2.create(),
-                            tmp = vec3.create();
-                        a[0] = border[i][0];
-                        a[1] = border[i][1];
-                        a[2] = 0;
-                        u[0] = .5 + a[0] / 360;
-                        u[1] = .5 - a[1] / 180;
-                        var r = vertexs.length / 14;
-                        project_mercator(tmp, a);
-                        vertexs.push(tmp[0], tmp[1], tmp[2]);
-                        vertexs.push(0, 0, 0);
-                        project_ecef(tmp, a);
-                        vertexs.push(tmp[0], tmp[1], tmp[2]);
-                        vertexs.push(0, 0, 0);
-                        vertexs.push(u[0], u[1]);
-
-                        // if (i < border.length - 1) {
-                        //     elements.push(r, r + 1);
-                        // }
-                    }
-                })
-            });
-            var a = triangulateShape(chinaGeoMetry[0].coordinates[0]);
-
-            each(a, function (vert) {
-
-                elements= elements.concat(vert);
-            });
-
-
-            self.province = {
-                buffer: makeVertexBuffer(context, new FLOAT32_ARRAY(vertexs)),
-                elements: makeElementBuffer(context, new Uint16Array(elements)),
-                elementsCount: elements.length,
-                vertexs: vertexs,
-            };
-            self.buildProvinced = true;
-        },
-        drawProvince: function () {
-            var self = this,
-                context = self.context,
-                camera = self.camera,
-                metry = self.geoMetry.line,
-                map_stride_bytes = self.geoMetry.map.strideBytes;
-
-            context.enable(context.DEPTH_TEST);
-            context.depthMask(false);
-            var lineProgram = metry.program.use();
-
-            if (self.buildProvinced !== true) {
-                self.buildProvince();
-            }
-            bindVertexBuffer(context, self.province.buffer);
-
-            lineProgram.uniformMatrix4fv("mvp", camera.mvp);
-            lineProgram.vertexAttribPointer("position", 3, context.FLOAT, false, map_stride_bytes, 0);
-            lineProgram.vertexAttribPointer("normal", 3, context.FLOAT, false, map_stride_bytes, 12);
-            lineProgram.vertexAttribPointer("position2", 3, context.FLOAT, false, map_stride_bytes, 24);
-            lineProgram.vertexAttribPointer("normal2", 3, context.FLOAT, false, map_stride_bytes, 36);
-            lineProgram.uniform1f("blend", camera.blend);
-
-            lineProgram.uniform1f("height", .1);
-
-            var level = MATH_MAX(MATH_MIN(MATH.round(camera.coordinate[2] * 100), 85), 35);
-            var alpha = 1 - ((level - 35) / 50);
-            var options = self.globe.getOptions("boundary");
-            var color = color2Vec3(options.color);
-            lineProgram.uniform4f("color", 1, 1, 1, 1);
-
-            // context.lineWidth(1);
-            bindElementBuffer(context, self.province.elements);
-            context.drawElements(context.TRIANGLES, self.province.elementsCount, context.UNSIGNED_SHORT, 0);
-
-            context.lineWidth(1);
-            context.depthMask(true);
-
         },
         /**
          * 画国家和城市名称

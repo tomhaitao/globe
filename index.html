@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>测试向量工具库</title>
+    <title>3D地球</title>
     <style type="text/css">
         html, body {
             margin: 0;
@@ -23,16 +23,11 @@
 
 </div>
 <!--<div class="globe"></div>-->
-<script type="text/javascript" src="three.js"></script>
 <script type="text/javascript" src="globe.js"></script>
 <script type="text/javascript">
     var globe;
     var globe2;
 
-    var faces = geoMetry.faces;
-    var lines = geoMetry.lines;
-    var verts = geoMetry.verts;
-    var china = geoMetry.countriesByCode["CN"];
     window.onload = function () {
         var element = document.getElementsByClassName("globe");
         Globe.registerTheme("blue", {

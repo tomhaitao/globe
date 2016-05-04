@@ -1678,7 +1678,7 @@
     /**
      * 颜色转vec3颜色
      * @param style
-     * @returns {Vector3}
+     * @returns
      */
     function color2Vec3(style) {
         var m,

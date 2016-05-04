@@ -1117,7 +1117,7 @@
 
     })();
 
-    
+
     /**
      * 生成缓冲区
      * @param gl            webgl
@@ -4447,7 +4447,7 @@
             var program = self.missile.program.use();
             program.uniformMatrix4fv("mvp", camera.mvp);
             program.uniform3fv("view_position", camera.viewPos);
-            program.uniform1f("width", 1);
+            program.uniform1f("width", .1);
             bindVertexBuffer(context, this.missile.buffer);
             program.vertexAttribPointer("position", 4, context.FLOAT, !1, 0, 0);
             each(items, function (missile) {
@@ -4456,7 +4456,6 @@
                     var time = self.time - missile.start_time;
 
                     if (2 > time) {
-                        console.log(time);
                         program.uniform1f("time", .5 * time);
                         program.uniform3fv("color", missile.color);
                         var a = 200;
@@ -4534,31 +4533,32 @@
          * @param angle
          * @returns {Missile}
          */
-        launch: function (source_coord, target_coord, style, sacle, angle) {
+        launch: function (style,source_coord, target_coord,  sacle, angle) {
             var self = this,
                 missile = self.getFreeMissile(),
                 color = color2Vec3(style),
                 camera = self.camera,
                 context = self.context,
                 bufferData = self.missile.bufferData;
+
             sacle = sacle || 1;
             angle = angle || 0;
 
             missile.has_source = !!source_coord;
 
             vec3.copy(missile.target_coord, target_coord);
-
+            vec3.copy(missile.source_coord, source_coord);
             vec3.copy(missile.color, color);
 
             missile.start_time = timeNow();
             missile.alive = true;
 
             if (missile.has_source) {
-                vec3.copy(missile.source_coord, source_coord);
-                var p = vec2.distance(source_coord, target_coord),
+
+                var p = vec2.distance(missile.source_coord, missile.target_coord),
                     m = .01 * p,
-                    d = (target_coord[0] - source_coord[0]) / p,
-                    _ = (target_coord[1] - source_coord[1]) / p,
+                    d = (missile.target_coord[0] - missile.source_coord[0]) / p,
+                    _ = (missile.target_coord[1] - missile.source_coord[1]) / p,
                     b = 200,
                     y = b * -_,
                     T = b * d;
@@ -4570,7 +4570,7 @@
                     M = vec3.create();
                 for (var R = 0; 100 > R; ++R) {
                     var P = R / (100 - 1);
-                    vec3.lerp(M, source_coord, target_coord, P);
+                    vec3.lerp(M, missile.source_coord, missile.target_coord, P);
                     var L = m * MATH_SIN(P * MATH_PI) * .15;
                     M[0] += E * L * y;
                     M[1] += E * L * T;
